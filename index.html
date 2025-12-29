@@ -2,202 +2,262 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>HEXODUS: The Strategy</title>
+    <title>HEXODUS: THE SIEGE</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        :root { --panel: rgba(13, 17, 23, 0.95); --accent: #00f2ff; }
-        body { margin: 0; background: #05070a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        :root { --def: #3498db; --atk: #e74c3c; --bg: #0f172a; }
+        body { margin: 0; background: var(--bg); color: white; font-family: 'Pretendard', sans-serif; overflow: hidden; }
         
-        /* UI 디자인 개선 */
-        #top-gui { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; pointer-events: none; }
-        .stat-box { background: var(--panel); padding: 15px 25px; border-radius: 12px; border: 1px solid #30363d; pointer-events: auto; min-width: 200px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
-        .nick { font-size: 1.2rem; font-weight: 900; margin-bottom: 8px; text-shadow: 0 0 10px var(--color); }
-        .bar-bg { background: #21262d; height: 6px; border-radius: 3px; margin: 10px 0; overflow: hidden; }
-        .bar-fill { background: var(--accent); height: 100%; transition: width 0.3s ease; }
+        /* 로비 스타일 */
+        #lobby { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.95); z-index: 100; }
+        .room-card { background: #1e293b; padding: 20px; margin: 10px; width: 300px; border-radius: 8px; border: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
         
-        #status-msg { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); font-size: 0.8rem; letter-spacing: 2px; color: #8b949e; text-transform: uppercase; }
-        canvas { display: block; }
+        /* 게임 UI 스타일 */
+        #game-ui { position: absolute; top: 0; left: 0; right: 0; padding: 20px; display: none; justify-content: space-between; pointer-events: none; }
+        .stat-box { background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px; border: 2px solid #333; pointer-events: auto; }
+        #controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: none; gap: 10px; }
+        .btn { background: #1e293b; border: 2px solid #475569; color: white; padding: 12px 24px; cursor: pointer; border-radius: 5px; font-weight: bold; }
+        .btn:hover { background: #334155; }
+        .btn.active { border-color: #38bdf8; box-shadow: 0 0 15px #38bdf8; }
+        
+        canvas { display: block; background: #020617; }
+        #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 50; }
     </style>
 </head>
 <body>
 
-<div id="top-gui">
-    <div class="stat-box">
-        <div id="p-nick" class="nick" style="--color: #fff">CONNECTING...</div>
-        <div style="font-size: 0.8rem; color: #8b949e;">ACTION POINTS (AP)</div>
-        <div class="bar-bg"><div id="ap-bar" class="bar-fill" style="width: 0%"></div></div>
-        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
-            <span>Gold: <b id="p-gold" style="color:#e3b341">0</b></span>
-            <span>Tiles: <b id="p-tiles">0</b></span>
-        </div>
+<div id="lobby">
+    <h1>HEXODUS: THE SIEGE</h1>
+    <button class="btn" onclick="createRoom()" style="margin-bottom: 30px; background: #38bdf8;">+ 새 전투 방 만들기</button>
+    <div id="room-list">방 목록 불러오는 중...</div>
+</div>
+
+<div id="game-ui">
+    <div class="stat-box" id="my-stats">
+        <div id="role-tag" style="font-size: 1.2em; font-weight: bold; margin-bottom: 5px;">역할 확인 중...</div>
+        <div>GOLD: <span id="gold">0</span>G (+5/sec)</div>
     </div>
-    
-    <div class="stat-box" style="min-width: 100px; text-align: center;">
-        <div style="font-size: 0.7rem; color: #8b949e;">REVENUE</div>
-        <div style="font-size: 1.1rem; color: #3fb950; font-weight: bold;">+<span id="p-income">0</span> / sec</div>
+    <div class="stat-box" style="text-align: right;">
+        <div style="color: #94a3b8;">CORE HP</div>
+        <div id="core-hp" style="font-size: 1.5em; color: #ff4757;">1000 / 1000</div>
     </div>
 </div>
 
-<div id="status-msg">INITIALIZING SYSTEM...</div>
-<canvas id="mapCanvas"></canvas>
+<div id="controls">
+    </div>
+
+<div id="overlay">
+    <h2 id="result-msg">승리!</h2>
+    <button class="btn" onclick="location.reload()">로비로 돌아가기</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
 
 <script>
     const SUPABASE_URL = 'https://ypwfazsbnudddksqkkiz.supabase.co/';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlwd2ZhenNibnVkZGRrc3Fra2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5ODg4NTgsImV4cCI6MjA4MjU2NDg1OH0.Mz0jdNuLughgNtklbuBeh5K2Q4HQf2cKt6dmeqBSJy4';
     const sClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    const canvas = document.getElementById('mapCanvas');
-    const ctx = canvas.getContext('2d');
-    let hexSize = 50;
+    let myId, currentRoomId, myRole; // 'defender' or 'attacker'
+    let gold = 0;
+    let coreHp = 1000;
+    let gameLoop;
+    let buildings = []; // {x, y, type}
+    let units = []; // {x, y, hp, type}
     
-    let myInfo = null;
-    let worldMap = [];
-    let playersCache = {};
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
 
     async function init() {
-        resize();
-        window.addEventListener('resize', resize);
+        const { data: { user } } = await sClient.auth.signInAnonymously();
+        myId = user.id;
+        refreshRooms();
         
-        try {
-            const { data: { user } } = await sClient.auth.signInAnonymously();
-            
-            // 1. 유저 정보 불러오기 또는 생성
-            const { data: pData } = await sClient.from('players').upsert({
-                id: user.id, 
-                nickname: "CONQUEROR_" + user.id.slice(0,4), 
-                color: `hsl(${Math.random() * 360}, 80%, 60%)`,
-                ap: 10, gold: 100
-            }).select().single();
-
-            myInfo = pData;
-
-            // 2. 전체 데이터 로드
-            const [mapRes, playerRes] = await Promise.all([
-                sClient.from('world_map').select('*'),
-                sClient.from('players').select('id, color, nickname')
-            ]);
-            
-            worldMap = mapRes.data;
-            playerRes.data.forEach(p => playersCache[p.id] = p);
-
-            // 3. 실시간 동기화
-            sClient.channel('room1')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'world_map' }, payload => {
-                    const idx = worldMap.findIndex(t => t.id === payload.new.id);
-                    if (idx !== -1) worldMap[idx] = payload.new;
-                    render();
-                })
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'players' }, payload => {
-                    if (payload.new.id === myInfo.id) {
-                        myInfo.ap = payload.new.ap;
-                        myInfo.gold = payload.new.gold;
-                        updateUI();
-                    }
-                    playersCache[payload.new.id] = payload.new;
-                })
-                .subscribe();
-
-            // 4. 게임 루프 시작 (AP/자원 자동 생성)
-            startGameLoop();
-            render();
-            document.getElementById('status-msg').innerText = "SYSTEM ONLINE";
-        } catch (e) { alert(e.message); }
+        // 실시간 방 목록 업데이트
+        sClient.channel('lobby').on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, refreshRooms).subscribe();
     }
 
-    function startGameLoop() {
-        setInterval(async () => {
-            // 자원 생산 로직: 땅 1개당 1골드씩 매초 상승 (로컬 표시용)
-            const myTiles = worldMap.filter(t => t.owner_id === myInfo.id).length;
-            myInfo.gold += myTiles;
-            
-            // AP 회복 로직 (최대 20까지)
-            if (myInfo.ap < 20) myInfo.ap += 0.2; 
-            
-            updateUI();
-        }, 1000);
-
-        // 10초마다 DB에 내 상태 저장
-        setInterval(() => {
-            sClient.from('players').update({ ap: Math.floor(myInfo.ap), gold: myInfo.gold }).eq('id', myInfo.id).then();
-        }, 10000);
+    async function refreshRooms() {
+        const { data } = await sClient.from('rooms').select('*').eq('status', 'waiting').order('created_at', { ascending: false });
+        const list = document.getElementById('room-list');
+        list.innerHTML = data.length ? '' : '현재 열려있는 방이 없습니다.';
+        data.forEach(room => {
+            list.innerHTML += `
+                <div class="room-card">
+                    <span>${room.name}</span>
+                    <button class="btn" onclick="joinRoom('${room.id}')">참가하기</button>
+                </div>`;
+        });
     }
 
-    function getDistance(q1, r1, q2, r2) {
-        return (Math.abs(q1 - q2) + Math.abs(q1 + r1 - q2 - r2) + Math.abs(r1 - r2)) / 2;
+    async function createRoom() {
+        const name = `전투 #${Math.floor(Math.random() * 1000)}`;
+        const { data, error } = await sClient.from('rooms').insert([{ name, defender_id: myId, status: 'waiting' }]).select();
+        if (data) joinRoom(data[0].id);
+    }
+
+    async function joinRoom(roomId) {
+        currentRoomId = roomId;
+        const { data: room } = await sClient.from('rooms').select('*').eq('id', roomId).single();
+        
+        if (room.defender_id === myId) {
+            myRole = 'defender';
+        } else {
+            myRole = 'attacker';
+            await sClient.from('rooms').update({ attacker_id: myId, status: 'playing' }).eq('id', roomId);
+        }
+
+        startMatch();
+    }
+
+    function startMatch() {
+        document.getElementById('lobby').style.display = 'none';
+        document.getElementById('game-ui').style.display = 'flex';
+        document.getElementById('controls').style.display = 'flex';
+        
+        const roleTag = document.getElementById('role-tag');
+        const ctrl = document.getElementById('controls');
+        
+        if (myRole === 'defender') {
+            roleTag.innerText = "🛡️ 막는 자 (DEFENDER)";
+            roleTag.style.color = "#38bdf8";
+            ctrl.innerHTML = `
+                <button class="btn" onclick="setAction('wall')">🧱 방벽 (20G)</button>
+                <button class="btn" onclick="setAction('tower')">🏹 포탑 (50G)</button>
+            `;
+        } else {
+            roleTag.innerText = "⚔️ 뚫는 자 (ATTACKER)";
+            roleTag.style.color = "#fb7185";
+            ctrl.innerHTML = `
+                <button class="btn" onclick="setAction('scout')">🏃 정찰병 (30G)</button>
+                <button class="btn" onclick="setAction('tank')">🛡️ 거인 (80G)</button>
+            `;
+        }
+
+        // 실시간 액션 수신
+        sClient.channel(`room_${currentRoomId}`)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_actions', filter: `room_id=eq.${currentRoomId}` }, payload => {
+                handleAction(payload.new);
+            }).subscribe();
+
+        // 1초마다 자원 생산 및 게임 루프 시작
+        setInterval(() => { gold += 5; updateUI(); }, 1000);
+        resize();
+        requestAnimationFrame(update);
+    }
+
+    let selectedType = null;
+    function setAction(type) {
+        selectedType = type;
+        document.querySelectorAll('.btn').forEach(b => b.classList.toggle('active', b.innerText.includes(type)));
     }
 
     canvas.onclick = async (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left - canvas.width/2;
-        const my = e.clientY - rect.top - canvas.height/2;
-        const q = Math.round(2/3 * mx / hexSize);
-        const r = Math.round((-1/3 * mx + Math.sqrt(3)/3 * my) / hexSize);
-
-        const target = worldMap.find(t => t.q === q && t.r === r);
-        if (!target || target.owner_id) return;
-
-        // 확장 규칙: 내 땅이 하나도 없으면 아무데나 가능, 있으면 인접한 곳만 가능
-        const myTiles = worldMap.filter(t => t.owner_id === myInfo.id);
-        const canCapture = myTiles.length === 0 || myTiles.some(t => getDistance(t.q, t.r, q, r) === 1);
-
-        if (canCapture && myInfo.ap >= 1) {
-            myInfo.ap -= 1;
-            // 즉시 반영(클라이언트 사이드 예측)
-            target.owner_id = myInfo.id;
-            render(); updateUI();
-            
-            // DB 업데이트
-            await sClient.from('world_map').update({ owner_id: myInfo.id }).eq('id', target.id);
-            await sClient.from('players').update({ ap: Math.floor(myInfo.ap) }).eq('id', myInfo.id);
-        } else if (!canCapture) {
-            document.getElementById('status-msg').innerText = "TOO FAR TO EXPAND!";
-            setTimeout(() => document.getElementById('status-msg').innerText = "SYSTEM ONLINE", 2000);
-        }
-    };
-
-    function drawHex(tile) {
-        const { x, y } = getCanvasCoords(tile.q, tile.r);
-        ctx.beginPath();
-        for (let i = 0; i < 6; i++) {
-            const angle = i * Math.PI / 3;
-            ctx.lineTo(x + hexSize * Math.cos(angle), y + hexSize * Math.sin(angle));
-        }
-        ctx.closePath();
-
-        const owner = playersCache[tile.owner_id];
-        ctx.fillStyle = owner ? owner.color + '44' : (tile.tile_type === 'mountain' ? '#161b22' : '#0d1117');
-        ctx.fill();
+        if (!selectedType) return;
         
-        ctx.strokeStyle = owner ? owner.color : '#30363d';
-        ctx.lineWidth = owner ? 3 : 1;
-        ctx.stroke();
+        const cost = { wall: 20, tower: 50, scout: 30, tank: 80 }[selectedType];
+        if (gold < cost) return;
 
-        if (owner) { // 점령된 타일 효과
-            ctx.shadowBlur = 10; ctx.shadowColor = owner.color;
-            ctx.stroke(); ctx.shadowBlur = 0;
+        gold -= cost;
+        await sClient.from('game_actions').insert([{
+            room_id: currentRoomId,
+            player_id: myId,
+            action_type: myRole === 'defender' ? 'build' : 'spawn',
+            data: { x: e.clientX, y: e.clientY, type: selectedType }
+        }]);
+    }
+
+    function handleAction(action) {
+        if (action.action_type === 'build') {
+            buildings.push({ ...action.data, hp: action.data.type === 'wall' ? 200 : 100 });
+        } else {
+            // 공격자는 우측에서 소환
+            units.push({ 
+                x: canvas.width, 
+                y: action.data.y, 
+                type: action.data.type, 
+                hp: action.data.type === 'scout' ? 50 : 200,
+                speed: action.data.type === 'scout' ? 2 : 0.8
+            });
         }
     }
 
-    function getCanvasCoords(q, r) {
-        return { x: canvas.width / 2 + hexSize * (3/2 * q), y: canvas.height / 2 + hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r) };
-    }
-
-    function render() {
+    function update() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        worldMap.forEach(drawHex);
+        
+        // 1. 본진(Core) 그리기
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(0, 0, 100, canvas.height);
+        ctx.fillStyle = '#38bdf8';
+        ctx.textAlign = 'center';
+        ctx.fillText("CORE", 50, canvas.height/2);
+
+        // 2. 건물 업데이트 및 그리기
+        buildings.forEach((b, i) => {
+            ctx.fillStyle = b.type === 'wall' ? '#475569' : '#0ea5e9';
+            ctx.fillRect(b.x - 20, b.y - 20, 40, 40);
+            ctx.fillStyle = 'white';
+            ctx.fillText(b.hp, b.x, b.y - 25);
+
+            // 포탑 사격 로직 (가장 가까운 유닛 공격)
+            if (b.type === 'tower') {
+                units.forEach(u => {
+                    const dist = Math.hypot(u.x - b.x, u.y - b.y);
+                    if (dist < 200) {
+                        u.hp -= 0.5; // 실시간 데미지
+                        ctx.strokeStyle = '#0ea5e9';
+                        ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(u.x, u.y); ctx.stroke();
+                    }
+                });
+            }
+        });
+
+        // 3. 유닛 업데이트 및 그리기
+        units.forEach((u, i) => {
+            u.x -= u.speed; // 왼쪽으로 전진
+            
+            ctx.fillStyle = u.type === 'scout' ? '#fb7185' : '#e11d48';
+            ctx.beginPath(); ctx.arc(u.x, u.y, u.type === 'scout' ? 10 : 20, 0, Math.PI*2); ctx.fill();
+            
+            // 건물 충돌 체크
+            buildings.forEach(b => {
+                if (Math.hypot(u.x - b.x, u.y - b.y) < 30) {
+                    b.hp -= 1;
+                    u.x += u.speed; // 전진 정지
+                }
+            });
+
+            // 코어 도달 체크
+            if (u.x < 100) {
+                coreHp -= (u.type === 'scout' ? 10 : 50);
+                units.splice(i, 1);
+                updateUI();
+            }
+
+            // 사망 체크
+            if (u.hp <= 0) units.splice(i, 1);
+        });
+
+        // 건물 파괴 체크
+        buildings = buildings.filter(b => b.hp > 0);
+
+        if (coreHp <= 0) endGame("공격자 승리!");
+
+        requestAnimationFrame(update);
     }
 
     function updateUI() {
-        const myTiles = worldMap.filter(t => t.owner_id === myInfo.id).length;
-        document.getElementById('p-nick').innerText = myInfo.nickname;
-        document.getElementById('p-nick').style.setProperty('--color', myInfo.color);
-        document.getElementById('p-gold').innerText = Math.floor(myInfo.gold);
-        document.getElementById('p-tiles').innerText = myTiles;
-        document.getElementById('p-income').innerText = myTiles;
-        document.getElementById('ap-bar').style.width = (myInfo.ap / 20 * 100) + "%";
+        document.getElementById('gold').innerText = gold;
+        document.getElementById('core-hp').innerText = `${coreHp} / 1000`;
     }
 
-    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; if(worldMap.length) render(); }
+    function endGame(msg) {
+        document.getElementById('overlay').style.display = 'flex';
+        document.getElementById('result-msg').innerText = msg;
+    }
+
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    window.onresize = resize;
     init();
 </script>
 </body>
