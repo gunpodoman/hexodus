@@ -2,112 +2,84 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>HEXODUS</title>
+    <title>HEXODUS - The Great Migration</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        :root { --bg: #020617; --card: rgba(15, 23, 42, 0.9); --accent: #f59e0b; }
-        body { margin: 0; background: var(--bg); color: white; font-family: 'Pretendard', system-ui, sans-serif; overflow: hidden; touch-action: none; }
-        
-        /* UI 레이어 */
-        #ui { position: absolute; top: 20px; left: 20px; z-index: 10; pointer-events: none; width: calc(100% - 40px); display: flex; justify-content: space-between; }
-        .stats-card { 
-            background: var(--card); backdrop-filter: blur(12px);
-            padding: 15px 20px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.6); pointer-events: auto; min-width: 150px;
-        }
-        .nickname { font-size: 1.1rem; font-weight: 800; margin-bottom: 8px; transition: color 0.3s; }
-        .res-row { display: flex; justify-content: space-between; font-size: 0.85rem; margin-top: 4px; color: #94a3b8; }
-        .res-row b { color: white; }
-
+        body { margin: 0; background: #020617; color: white; font-family: sans-serif; overflow: hidden; }
+        #ui { position: absolute; top: 20px; left: 20px; z-index: 10; pointer-events: none; }
+        .stats-card { background: rgba(15, 23, 42, 0.9); padding: 20px; border-radius: 16px; pointer-events: auto; border: 1px solid rgba(255,255,255,0.1); }
         canvas { display: block; cursor: crosshair; }
-        #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 30px; font-size: 0.8rem; color: #f59e0b; opacity: 0; transition: opacity 0.3s; pointer-events: none; border: 1px solid #f59e0b; }
+        #status-msg { position: fixed; bottom: 20px; width: 100%; text-align: center; color: #475569; }
     </style>
 </head>
 <body>
 
 <div id="ui">
     <div class="stats-card">
-        <div id="p-nickname" class="nickname">CONNECTING...</div>
-        <div class="res-row"><span>Action Point</span> <b id="p-ap">0</b></div>
-        <div class="res-row"><span>Gold</span> <b id="p-gold">0</b></div>
-    </div>
-    <div id="leaderboard" class="stats-card" style="min-width: 120px; text-align: right;">
-        <div style="font-size: 0.7rem; color: #64748b; margin-bottom: 5px;">WORLD STATUS</div>
-        <div id="territory-count" style="font-weight: bold; color: var(--accent);">0 TILES</div>
+        <div id="p-nickname" style="font-weight:bold; font-size:1.2rem; margin-bottom:5px;">연결 중...</div>
+        <div style="font-size:0.9rem; color:#94a3b8;">AP: <b id="p-ap" style="color:white">0</b> | Gold: <b id="p-gold" style="color:white">0</b></div>
     </div>
 </div>
-
-<div id="toast">메시지</div>
+<div id="status-msg">동기화 대기 중...</div>
 <canvas id="mapCanvas"></canvas>
 
 <script>
+    // --- 설정 정보 ---
     const SUPABASE_URL = 'https://ypwfazsbnudddksqkkiz.supabase.co/';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlwd2ZhenNibnVkZGRrc3Fra2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5ODg4NTgsImV4cCI6MjA4MjU2NDg1OH0.Mz0jdNuLughgNtklbuBeh5K2Q4HQf2cKt6dmeqBSJy4';
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const sClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const canvas = document.getElementById('mapCanvas');
     const ctx = canvas.getContext('2d');
-    const hexSize = 48; 
+    const hexSize = 45;
     
     let myInfo = null;
     let worldMap = [];
-    let playersCache = {}; // ID별 색상 및 닉네임 캐시
+    let playersCache = {};
 
     async function init() {
         resize();
         window.addEventListener('resize', resize);
+        
+        try {
+            // 1. 익명 로그인 (Authentication -> Providers -> Anonymous 활성화 필수!)
+            const { data: { user }, error: authError } = await sClient.auth.signInAnonymously();
+            if (authError) throw new Error("로그인 실패: " + authError.message);
 
-        // 1. 유저 인증 및 프로필 생성/불러오기
-        let savedId = localStorage.getItem('hexodus_user_id');
-        let authData;
+            const myColor = `hsl(${Math.random() * 360}, 75%, 60%)`;
+            
+            // 2. 플레이어 등록
+            const { data: pData, error: pError } = await sClient.from('players').upsert({
+                id: user.id, nickname: "CONQUEROR_" + user.id.slice(0,4), color: myColor
+            }).select().single();
+            if (pError) throw new Error("플레이어 등록 실패: " + pError.message);
 
-        if (!savedId) {
-            const { data } = await supabase.auth.signInAnonymously();
-            authData = data.user;
-            localStorage.setItem('hexodus_user_id', authData.id);
-        } else {
-            authData = { id: savedId };
+            myInfo = pData;
+            updateUI();
+
+            // 3. 맵 데이터 로드
+            const { data: mapData, error: mError } = await sClient.from('world_map').select('*');
+            if (mError) throw new Error("맵 로드 실패: " + mError.message);
+            if (!mapData || mapData.length === 0) throw new Error("맵 데이터가 비어있습니다. SQL Editor에서 데이터를 먼저 생성하세요!");
+
+            worldMap = mapData;
+
+            // 4. 실시간 구독
+            sClient.channel('world-changes')
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'world_map' }, payload => {
+                    const idx = worldMap.findIndex(t => t.id === payload.new.id);
+                    if (idx !== -1) worldMap[idx] = payload.new;
+                    render();
+                }).subscribe();
+
+            render();
+            document.getElementById('status-msg').innerText = "WORLD SYNCED";
+        } catch (err) {
+            alert(err.message);
         }
-
-        const myColor = `hsl(${Math.random() * 360}, 75%, 60%)`;
-        const { data: pData } = await supabase.from('players').upsert({
-            id: authData.id, nickname: "CONQUEROR_" + authData.id.slice(0,4), color: myColor
-        }).select().single();
-
-        myInfo = pData;
-        updateUI();
-
-        // 2. 초기 데이터 로드 (플레이어 전체 정보 + 맵 전체 정보)
-        const [playersRes, mapRes] = await Promise.all([
-            supabase.from('players').select('id, color, nickname'),
-            supabase.from('world_map').select('*')
-        ]);
-
-        playersRes.data.forEach(p => playersCache[p.id] = p);
-        worldMap = mapRes.data;
-
-        // 3. 실시간 구독 설정
-        // 맵 변경 감지
-        supabase.channel('map-all')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'world_map' }, payload => {
-                const idx = worldMap.findIndex(t => t.id === payload.new.id);
-                if (idx !== -1) worldMap[idx] = payload.new;
-                render();
-            })
-            .subscribe();
-
-        // 새 플레이어 진입 감지
-        supabase.channel('players-all')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'players' }, payload => {
-                playersCache[payload.new.id] = payload.new;
-            })
-            .subscribe();
-
-        render();
-        showToast("Welcome to HEXODUS");
     }
 
+    // (좌표 계산 및 렌더링 함수들 - 이전과 동일)
     function getCanvasCoords(q, r) {
         const x = canvas.width / 2 + hexSize * (3/2 * q);
         const y = canvas.height / 2 + hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
@@ -116,89 +88,48 @@
 
     function drawHex(tile) {
         const { x, y } = getCanvasCoords(tile.q, tile.r);
-        
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
             const angle = i * Math.PI / 3;
             ctx.lineTo(x + hexSize * Math.cos(angle), y + hexSize * Math.sin(angle));
         }
         ctx.closePath();
-
-        // 기본 타일 스타일
         ctx.fillStyle = tile.tile_type === 'mountain' ? '#1e293b' : '#0f172a';
         ctx.fill();
-
-        // 소유자 색상 적용
-        if (tile.owner_id && playersCache[tile.owner_id]) {
-            const owner = playersCache[tile.owner_id];
-            ctx.strokeStyle = owner.color;
-            ctx.lineWidth = 3;
-            ctx.stroke();
-            ctx.fillStyle = owner.color + "33"; 
-            ctx.fill();
+        if (tile.owner_id) {
+            ctx.strokeStyle = (tile.owner_id === myInfo.id) ? myInfo.color : '#ef4444';
+            ctx.lineWidth = 3; ctx.stroke();
         } else {
-            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-            ctx.lineWidth = 1;
-            ctx.stroke();
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1; ctx.stroke();
         }
     }
 
     function render() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         worldMap.forEach(drawHex);
-        
-        const ownedCount = worldMap.filter(t => t.owner_id).length;
-        document.getElementById('territory-count').innerText = `${ownedCount} / ${worldMap.length} TILES`;
     }
 
     canvas.onclick = async (e) => {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left - canvas.width/2;
         const my = e.clientY - rect.top - canvas.height/2;
-
-        // 정교한 Hex Click Detection
         const q = Math.round(2/3 * mx / hexSize);
         const r = Math.round((-1/3 * mx + Math.sqrt(3)/3 * my) / hexSize);
-
         const target = worldMap.find(t => t.q === q && t.r === r);
-        
-        if (target && !target.owner_id) {
-            if (myInfo.ap > 0) {
-                const { error } = await supabase.from('world_map')
-                    .update({ owner_id: myInfo.id })
-                    .eq('id', target.id);
-                
-                if (!error) {
-                    myInfo.ap--;
-                    updateUI();
-                    showToast("Territory Expanded!");
-                }
-            } else {
-                showToast("Not enough AP!");
-            }
+        if (target && !target.owner_id && myInfo.ap > 0) {
+            await sClient.from('world_map').update({ owner_id: myInfo.id }).eq('id', target.id);
+            myInfo.ap--; updateUI();
         }
     };
 
     function updateUI() {
-        const nickElem = document.getElementById('p-nickname');
-        nickElem.innerText = myInfo.nickname;
-        nickElem.style.color = myInfo.color;
+        document.getElementById('p-nickname').innerText = myInfo.nickname;
+        document.getElementById('p-nickname').style.color = myInfo.color;
         document.getElementById('p-ap').innerText = myInfo.ap;
         document.getElementById('p-gold').innerText = myInfo.gold;
     }
 
-    function showToast(msg) {
-        const t = document.getElementById('toast');
-        t.innerText = msg;
-        t.style.opacity = 1;
-        setTimeout(() => t.style.opacity = 0, 2000);
-    }
-
-    function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        render();
-    }
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; render(); }
 
     init();
 </script>
