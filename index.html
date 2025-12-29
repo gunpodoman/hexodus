@@ -2,53 +2,63 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>HEXODUS: THE SIEGE</title>
+    <title>HEXODUS: UNIT BATTLE</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        :root { --def: #3498db; --atk: #e74c3c; --bg: #0f172a; }
+        :root { --left-color: #3b82f6; --right-color: #ef4444; --bg: #0f172a; }
         body { margin: 0; background: var(--bg); color: white; font-family: 'Pretendard', sans-serif; overflow: hidden; }
         
-        /* 로비 스타일 */
-        #lobby { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.95); z-index: 100; }
-        .room-card { background: #1e293b; padding: 20px; margin: 10px; width: 300px; border-radius: 8px; border: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+        /* 로비 및 화면 덮개 */
+        #lobby, #overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg); z-index: 100; }
+        .room-card { background: #1e293b; padding: 20px; margin: 10px; width: 350px; border-radius: 12px; border: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
         
-        /* 게임 UI 스타일 */
+        /* 게임 인터페이스 */
         #game-ui { position: absolute; top: 0; left: 0; right: 0; padding: 20px; display: none; justify-content: space-between; pointer-events: none; }
-        .stat-box { background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px; border: 2px solid #333; pointer-events: auto; }
-        #controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: none; gap: 10px; }
-        .btn { background: #1e293b; border: 2px solid #475569; color: white; padding: 12px 24px; cursor: pointer; border-radius: 5px; font-weight: bold; }
-        .btn:hover { background: #334155; }
-        .btn.active { border-color: #38bdf8; box-shadow: 0 0 15px #38bdf8; }
+        .hud { background: rgba(0,0,0,0.6); padding: 15px; border-radius: 10px; pointer-events: auto; min-width: 150px; border: 2px solid #333; }
         
-        canvas { display: block; background: #020617; }
-        #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 50; }
+        /* 하단 유닛 생산 버튼 */
+        #controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: none; gap: 15px; pointer-events: auto; }
+        .unit-btn { background: #1e293b; border: 2px solid #475569; color: white; padding: 15px 25px; cursor: pointer; border-radius: 10px; text-align: center; transition: 0.2s; }
+        .unit-btn:hover { background: #334155; transform: translateY(-5px); }
+        .unit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .price { display: block; font-size: 0.8em; color: #fbbf24; margin-top: 5px; }
+
+        canvas { display: block; background: linear-gradient(to bottom, #1e293b, #0f172a); }
     </style>
 </head>
 <body>
 
 <div id="lobby">
-    <h1>HEXODUS: THE SIEGE</h1>
-    <button class="btn" onclick="createRoom()" style="margin-bottom: 30px; background: #38bdf8;">+ 새 전투 방 만들기</button>
-    <div id="room-list">방 목록 불러오는 중...</div>
+    <h1 style="font-size: 3rem; margin-bottom: 10px;">HEXODUS</h1>
+    <p style="color: #94a3b8; margin-bottom: 30px;">실시간 1vs1 유닛 대전</p>
+    <button class="unit-btn" onclick="createRoom()" style="background: var(--left-color); border: none;">+ 새 경기 생성</button>
+    <div id="room-list" style="margin-top: 20px;"></div>
 </div>
 
 <div id="game-ui">
-    <div class="stat-box" id="my-stats">
-        <div id="role-tag" style="font-size: 1.2em; font-weight: bold; margin-bottom: 5px;">역할 확인 중...</div>
-        <div>GOLD: <span id="gold">0</span>G (+5/sec)</div>
+    <div class="hud" style="border-left: 5px solid var(--left-color);">
+        <div id="p-left-name">대기 중...</div>
+        <div style="font-size: 1.5rem; color: #fbbf24;"><span id="gold">0</span>G</div>
     </div>
-    <div class="stat-box" style="text-align: right;">
+    <div style="text-align: center; flex-grow: 1; padding-top: 20px;">
+        <h2 id="match-status" style="letter-spacing: 5px; color: #64748b;">VS</h2>
+    </div>
+    <div class="hud" style="text-align: right; border-right: 5px solid var(--right-color);">
+        <div id="p-right-name">대기 중...</div>
         <div style="color: #94a3b8;">CORE HP</div>
-        <div id="core-hp" style="font-size: 1.5em; color: #ff4757;">1000 / 1000</div>
+        <div id="core-hp" style="font-size: 1.5rem; color: #ff4757;">100 / 100</div>
     </div>
 </div>
 
 <div id="controls">
-    </div>
+    <button class="unit-btn" onclick="spawnUnit('sword')">⚔️ 검병 <span class="price">20G</span></button>
+    <button class="unit-btn" onclick="spawnUnit('shield')">🛡️ 방패병 <span class="price">50G</span></button>
+    <button class="unit-btn" onclick="spawnUnit('archer')">🏹 궁수 <span class="price">40G</span></button>
+</div>
 
-<div id="overlay">
-    <h2 id="result-msg">승리!</h2>
-    <button class="btn" onclick="location.reload()">로비로 돌아가기</button>
+<div id="overlay" style="display: none;">
+    <h1 id="result-text">WINNER</h1>
+    <button class="unit-btn" onclick="location.reload()">로비로 돌아가기</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -58,202 +68,182 @@
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlwd2ZhenNibnVkZGRrc3Fra2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5ODg4NTgsImV4cCI6MjA4MjU2NDg1OH0.Mz0jdNuLughgNtklbuBeh5K2Q4HQf2cKt6dmeqBSJy4';
     const sClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    let myId, currentRoomId, myRole; // 'defender' or 'attacker'
+    let myId, currentRoomId, mySide; 
     let gold = 0;
-    let coreHp = 1000;
-    let gameLoop;
-    let buildings = []; // {x, y, type}
-    let units = []; // {x, y, hp, type}
+    let baseHp = { left: 100, right: 100 };
+    let units = []; // {side, type, x, y, hp, maxHp, speed, range, damage}
     
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+
+    const UNIT_TYPES = {
+        sword:  { hp: 100, speed: 1.5, range: 40, damage: 10, cost: 20, icon: '⚔️' },
+        shield: { hp: 300, speed: 0.8, range: 35, damage: 5,  cost: 50, icon: '🛡️' },
+        archer: { hp: 60,  speed: 1.2, range: 200, damage: 15, cost: 40, icon: '🏹' }
+    };
 
     async function init() {
         const { data: { user } } = await sClient.auth.signInAnonymously();
         myId = user.id;
         refreshRooms();
-        
-        // 실시간 방 목록 업데이트
         sClient.channel('lobby').on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, refreshRooms).subscribe();
     }
 
     async function refreshRooms() {
-        const { data } = await sClient.from('rooms').select('*').eq('status', 'waiting').order('created_at', { ascending: false });
+        const { data } = await sClient.from('rooms').select('*').eq('status', 'waiting');
         const list = document.getElementById('room-list');
-        list.innerHTML = data.length ? '' : '현재 열려있는 방이 없습니다.';
+        list.innerHTML = '';
         data.forEach(room => {
-            list.innerHTML += `
-                <div class="room-card">
-                    <span>${room.name}</span>
-                    <button class="btn" onclick="joinRoom('${room.id}')">참가하기</button>
-                </div>`;
+            list.innerHTML += `<div class="room-card"><span>${room.name}</span><button class="unit-btn" onclick="joinRoom('${room.id}')" style="padding: 10px 20px;">참가</button></div>`;
         });
     }
 
     async function createRoom() {
-        const name = `전투 #${Math.floor(Math.random() * 1000)}`;
-        const { data, error } = await sClient.from('rooms').insert([{ name, defender_id: myId, status: 'waiting' }]).select();
-        if (data) joinRoom(data[0].id);
+        const { data } = await sClient.from('rooms').insert([{ name: '전투 방', player_left: myId }]).select().single();
+        mySide = 'left';
+        currentRoomId = data.id;
+        waitForPlayer();
     }
 
     async function joinRoom(roomId) {
+        mySide = 'right';
         currentRoomId = roomId;
-        const { data: room } = await sClient.from('rooms').select('*').eq('id', roomId).single();
-        
-        if (room.defender_id === myId) {
-            myRole = 'defender';
-        } else {
-            myRole = 'attacker';
-            await sClient.from('rooms').update({ attacker_id: myId, status: 'playing' }).eq('id', roomId);
-        }
-
-        startMatch();
+        await sClient.from('rooms').update({ player_right: myId, status: 'playing' }).eq('id', roomId);
+        startBattle();
     }
 
-    function startMatch() {
+    function waitForPlayer() {
+        document.getElementById('lobby').innerHTML = `<h1>플레이어 대기 중...</h1><p>상대방이 들어오면 시작됩니다.</p>`;
+        sClient.channel(`room_${currentRoomId}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms' }, payload => {
+            if (payload.new.status === 'playing') startBattle();
+        }).subscribe();
+    }
+
+    function startBattle() {
         document.getElementById('lobby').style.display = 'none';
         document.getElementById('game-ui').style.display = 'flex';
         document.getElementById('controls').style.display = 'flex';
         
-        const roleTag = document.getElementById('role-tag');
-        const ctrl = document.getElementById('controls');
-        
-        if (myRole === 'defender') {
-            roleTag.innerText = "🛡️ 막는 자 (DEFENDER)";
-            roleTag.style.color = "#38bdf8";
-            ctrl.innerHTML = `
-                <button class="btn" onclick="setAction('wall')">🧱 방벽 (20G)</button>
-                <button class="btn" onclick="setAction('tower')">🏹 포탑 (50G)</button>
-            `;
-        } else {
-            roleTag.innerText = "⚔️ 뚫는 자 (ATTACKER)";
-            roleTag.style.color = "#fb7185";
-            ctrl.innerHTML = `
-                <button class="btn" onclick="setAction('scout')">🏃 정찰병 (30G)</button>
-                <button class="btn" onclick="setAction('tank')">🛡️ 거인 (80G)</button>
-            `;
-        }
-
-        // 실시간 액션 수신
-        sClient.channel(`room_${currentRoomId}`)
+        // 실시간 액션 구독
+        sClient.channel(`actions_${currentRoomId}`)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_actions', filter: `room_id=eq.${currentRoomId}` }, payload => {
-                handleAction(payload.new);
+                createUnit(payload.new.player_side, payload.new.unit_type);
             }).subscribe();
 
-        // 1초마다 자원 생산 및 게임 루프 시작
-        setInterval(() => { gold += 5; updateUI(); }, 1000);
-        resize();
-        requestAnimationFrame(update);
-    }
-
-    let selectedType = null;
-    function setAction(type) {
-        selectedType = type;
-        document.querySelectorAll('.btn').forEach(b => b.classList.toggle('active', b.innerText.includes(type)));
-    }
-
-    canvas.onclick = async (e) => {
-        if (!selectedType) return;
+        // 골드 충전 (1초에 10G)
+        setInterval(() => { gold += 10; updateUI(); }, 1000);
         
-        const cost = { wall: 20, tower: 50, scout: 30, tank: 80 }[selectedType];
-        if (gold < cost) return;
-
-        gold -= cost;
-        await sClient.from('game_actions').insert([{
-            room_id: currentRoomId,
-            player_id: myId,
-            action_type: myRole === 'defender' ? 'build' : 'spawn',
-            data: { x: e.clientX, y: e.clientY, type: selectedType }
-        }]);
+        resize();
+        gameLoop();
     }
 
-    function handleAction(action) {
-        if (action.action_type === 'build') {
-            buildings.push({ ...action.data, hp: action.data.type === 'wall' ? 200 : 100 });
-        } else {
-            // 공격자는 우측에서 소환
-            units.push({ 
-                x: canvas.width, 
-                y: action.data.y, 
-                type: action.data.type, 
-                hp: action.data.type === 'scout' ? 50 : 200,
-                speed: action.data.type === 'scout' ? 2 : 0.8
-            });
-        }
+    async function spawnUnit(type) {
+        if (gold < UNIT_TYPES[type].cost) return;
+        gold -= UNIT_TYPES[type].cost;
+        updateUI();
+        await sClient.from('game_actions').insert([{ room_id: currentRoomId, player_side: mySide, unit_type: type }]);
     }
 
-    function update() {
+    function createUnit(side, type) {
+        const stats = UNIT_TYPES[type];
+        units.push({
+            side, type,
+            x: side === 'left' ? 100 : canvas.width - 100,
+            y: canvas.height / 2 + (Math.random() * 60 - 30),
+            hp: stats.hp,
+            maxHp: stats.hp,
+            speed: stats.speed,
+            range: stats.range,
+            damage: stats.damage,
+            icon: stats.icon
+        });
+    }
+
+    function gameLoop() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // 1. 본진(Core) 그리기
-        ctx.fillStyle = '#1e293b';
-        ctx.fillRect(0, 0, 100, canvas.height);
-        ctx.fillStyle = '#38bdf8';
-        ctx.textAlign = 'center';
-        ctx.fillText("CORE", 50, canvas.height/2);
+        // 성 그리기
+        drawBase(50, canvas.height / 2, 'left', baseHp.left);
+        drawBase(canvas.width - 50, canvas.height / 2, 'right', baseHp.right);
 
-        // 2. 건물 업데이트 및 그리기
-        buildings.forEach((b, i) => {
-            ctx.fillStyle = b.type === 'wall' ? '#475569' : '#0ea5e9';
-            ctx.fillRect(b.x - 20, b.y - 20, 40, 40);
-            ctx.fillStyle = 'white';
-            ctx.fillText(b.hp, b.x, b.y - 25);
-
-            // 포탑 사격 로직 (가장 가까운 유닛 공격)
-            if (b.type === 'tower') {
-                units.forEach(u => {
-                    const dist = Math.hypot(u.x - b.x, u.y - b.y);
-                    if (dist < 200) {
-                        u.hp -= 0.5; // 실시간 데미지
-                        ctx.strokeStyle = '#0ea5e9';
-                        ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(u.x, u.y); ctx.stroke();
-                    }
-                });
-            }
-        });
-
-        // 3. 유닛 업데이트 및 그리기
+        // 유닛 업데이트
         units.forEach((u, i) => {
-            u.x -= u.speed; // 왼쪽으로 전진
+            let targetSide = u.side === 'left' ? 'right' : 'left';
+            let enemyBaseX = u.side === 'left' ? canvas.width - 50 : 50;
             
-            ctx.fillStyle = u.type === 'scout' ? '#fb7185' : '#e11d48';
-            ctx.beginPath(); ctx.arc(u.x, u.y, u.type === 'scout' ? 10 : 20, 0, Math.PI*2); ctx.fill();
-            
-            // 건물 충돌 체크
-            buildings.forEach(b => {
-                if (Math.hypot(u.x - b.x, u.y - b.y) < 30) {
-                    b.hp -= 1;
-                    u.x += u.speed; // 전진 정지
+            // 1. 적 유닛 찾기
+            let closestEnemy = null;
+            let minDist = Infinity;
+            units.forEach(target => {
+                if (target.side !== u.side) {
+                    let d = Math.abs(u.x - target.x);
+                    if (d < minDist) { minDist = d; closestEnemy = target; }
                 }
             });
 
-            // 코어 도달 체크
-            if (u.x < 100) {
-                coreHp -= (u.type === 'scout' ? 10 : 50);
-                units.splice(i, 1);
-                updateUI();
+            // 2. 이동 또는 공격
+            let distToBase = Math.abs(u.x - enemyBaseX);
+            
+            if (minDist <= u.range) {
+                // 적 유닛 공격
+                closestEnemy.hp -= u.damage / 60; 
+                // 공격 이펙트 (선)
+                ctx.strokeStyle = u.side === 'left' ? '#60a5fa' : '#f87171';
+                ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(closestEnemy.x, closestEnemy.y); ctx.stroke();
+            } else if (distToBase <= u.range) {
+                // 성 공격
+                baseHp[targetSide] -= u.damage / 60;
+                ctx.strokeStyle = 'yellow';
+                ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(enemyBaseX, canvas.height/2); ctx.stroke();
+            } else {
+                // 전진
+                u.x += u.side === 'left' ? u.speed : -u.speed;
             }
 
-            // 사망 체크
-            if (u.hp <= 0) units.splice(i, 1);
+            // 3. 유닛 그리기
+            drawUnit(u);
         });
 
-        // 건물 파괴 체크
-        buildings = buildings.filter(b => b.hp > 0);
+        // 죽은 유닛 제거
+        units = units.filter(u => u.hp > 0);
 
-        if (coreHp <= 0) endGame("공격자 승리!");
+        // 승패 체크
+        if (baseHp.left <= 0) showResult("RIGHT PLAYER WIN!");
+        if (baseHp.right <= 0) showResult("LEFT PLAYER WIN!");
 
-        requestAnimationFrame(update);
+        updateUI();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function drawBase(x, y, side, hp) {
+        ctx.fillStyle = side === 'left' ? '#3b82f6' : '#ef4444';
+        ctx.fillRect(x - 40, y - 60, 80, 120);
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.fillText(`CASTLE`, x, y);
+        // HP 바
+        ctx.fillStyle = '#1e293b'; ctx.fillRect(x - 40, y - 80, 80, 10);
+        ctx.fillStyle = '#10b981'; ctx.fillRect(x - 40, y - 80, (hp / 100) * 80, 10);
+    }
+
+    function drawUnit(u) {
+        ctx.font = "24px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(u.icon, u.x, u.y);
+        // 유닛 HP 바
+        ctx.fillStyle = 'red'; ctx.fillRect(u.x - 15, u.y - 25, 30, 4);
+        ctx.fillStyle = 'lime'; ctx.fillRect(u.x - 15, u.y - 25, (u.hp / u.maxHp) * 30, 4);
     }
 
     function updateUI() {
-        document.getElementById('gold').innerText = gold;
-        document.getElementById('core-hp').innerText = `${coreHp} / 1000`;
+        document.getElementById('gold').innerText = Math.floor(gold);
+        document.getElementById('core-hp').innerText = `${Math.ceil(baseHp.right)} / 100`;
+        // 내 성 HP 표시는 알아서 되도록 설정
     }
 
-    function endGame(msg) {
+    function showResult(text) {
         document.getElementById('overlay').style.display = 'flex';
-        document.getElementById('result-msg').innerText = msg;
+        document.getElementById('result-text').innerText = text;
     }
 
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
