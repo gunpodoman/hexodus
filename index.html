@@ -2,236 +2,201 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>HEXODUS: THE FINAL</title>
+    <title>HEXODUS: CANNON</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        :root { --p1: #3b82f6; --p2: #ef4444; --bg: #0f172a; }
-        body { margin: 0; background: var(--bg); color: white; font-family: sans-serif; overflow: hidden; }
-        
-        /* 로비 레이어 */
-        #lobby { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #020617; z-index: 100; }
-        .btn { background: #1e293b; border: 1px solid #334155; color: white; padding: 15px 30px; cursor: pointer; border-radius: 8px; font-weight: bold; margin: 10px; }
-        .btn:hover { background: #334155; }
-        .room-item { background: #1e293b; padding: 15px; margin: 5px; width: 300px; display: flex; justify-content: space-between; border-radius: 8px; }
-
-        /* 게임 화면 */
-        #ui { position: absolute; top: 0; width: 100%; padding: 20px; display: none; justify-content: space-between; box-sizing: border-box; }
-        .stat { background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px; border: 2px solid #333; }
-        #bottom-menu { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: none; gap: 10px; }
-        
-        canvas { display: block; }
-        #debug { position: fixed; bottom: 0; left: 0; background: rgba(0,0,0,0.8); color: lime; font-size: 12px; max-height: 100px; overflow-y: auto; width: 100%; pointer-events: none; }
+        body { margin: 0; background: #0f172a; color: white; font-family: sans-serif; overflow: hidden; }
+        #lobby { position: fixed; inset: 0; background: #020617; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        #game-ui { position: absolute; top: 20px; width: 100%; display: none; justify-content: space-between; padding: 0 40px; box-sizing: border-box; }
+        .hud { background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; border: 1px solid #334155; }
+        #controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: none; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 15px; gap: 20px; align-items: center; border: 1px solid #3b82f6; }
+        input[type=range] { width: 150px; }
+        .btn { background: #3b82f6; color: white; border: none; padding: 15px 30px; cursor: pointer; border-radius: 8px; font-weight: bold; }
+        .btn:disabled { background: #1e293b; color: #64748b; cursor: not-allowed; }
+        canvas { display: block; background: linear-gradient(to bottom, #1e293b, #0f172a); }
+        #turn-indicator { position: absolute; top: 100px; left: 50%; transform: translateX(-50%); font-size: 2rem; font-weight: bold; color: #fbbf24; text-shadow: 0 0 10px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
 
 <div id="lobby">
-    <h1>HEXODUS: 1vs1 전략</h1>
-    <button class="btn" onclick="createRoom()" style="background: var(--p1);">새 방 만들기</button>
-    <div id="room-list">방 목록 로딩 중...</div>
+    <h1 style="font-size: 3rem; margin-bottom: 20px;">HEXODUS CANNON</h1>
+    <button class="btn" onclick="quickMatch()">전투 시작 (매칭)</button>
+    <p id="lobby-status" style="margin-top: 20px; color: #94a3b8;"></p>
 </div>
 
-<div id="ui">
-    <div class="stat" style="border-left: 5px solid var(--p1);">
-        <div>MY GOLD: <span id="gold-val" style="color: gold;">0</span>G</div>
-        <div id="my-side-text">SIDE: -</div>
+<div id="game-ui">
+    <div class="hud" style="border-left: 4px solid #3b82f6;">
+        <div id="p1-label">PLAYER 1 (BLUE)</div>
+        <div id="p1-hp" style="font-size: 1.5rem; color: #60a5fa;">HP: 100</div>
     </div>
-    <div class="stat" style="text-align: right; border-right: 5px solid var(--p2);">
-        <div>CORE HP</div>
-        <div id="hp-val" style="font-size: 20px; color: #ff4757;">100 / 100</div>
+    <div id="turn-indicator">대기 중...</div>
+    <div class="hud" style="text-align: right; border-right: 4px solid #ef4444;">
+        <div id="p2-label">PLAYER 2 (RED)</div>
+        <div id="p2-hp" style="font-size: 1.5rem; color: #f87171;">HP: 100</div>
     </div>
 </div>
 
-<div id="bottom-menu">
-    <button class="btn" onclick="sendSpawn('sword')">⚔️ 검병 (20G)</button>
-    <button class="btn" onclick="sendSpawn('shield')">🛡️ 방패병 (50G)</button>
-    <button class="btn" onclick="sendSpawn('archer')">🏹 궁수 (40G)</button>
+<div id="controls">
+    <div>각도: <span id="angle-val">45</span>°<br><input type="range" id="angle-input" min="0" max="180" value="45"></div>
+    <div>파워: <span id="power-val">50</span><br><input type="range" id="power-input" min="10" max="100" value="50"></div>
+    <button id="fire-btn" class="btn" onclick="fire()">FIRE!</button>
 </div>
 
-<div id="debug">시스템 로그 대기 중...</div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
     const SUPABASE_URL = 'https://ypwfazsbnudddksqkkiz.supabase.co/';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlwd2ZhenNibnVkZGRrc3Fra2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5ODg4NTgsImV4cCI6MjA4MjU2NDg1OH0.Mz0jdNuLughgNtklbuBeh5K2Q4HQf2cKt6dmeqBSJy4';
-    const sClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    let myId = "user_" + Math.random().toString(36).slice(2, 7);
-    let myRoomId = null;
-    let mySide = null;
-    let gold = 0;
-    let baseHp = { left: 100, right: 100 };
-    let units = [];
-    
+    let myId = "U_" + Math.random().toString(36).substr(2, 4);
+    let roomId, mySide, currentTurn;
+    let p1Hp = 100, p2Hp = 100;
+    let projectiles = [];
+
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
 
-    function log(msg) {
-        const d = document.getElementById('debug');
-        d.innerHTML += `<div>> ${msg}</div>`;
-        d.scrollTop = d.scrollHeight;
-    }
+    // UI 동기화
+    document.getElementById('angle-input').oninput = e => document.getElementById('angle-val').innerText = e.target.value;
+    document.getElementById('power-input').oninput = e => document.getElementById('power-val').innerText = e.target.value;
 
-    async function init() {
-        log("접속 시도 중...");
-        refreshRooms();
-        sClient.channel('lobby').on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, refreshRooms).subscribe();
-    }
+    async function quickMatch() {
+        document.getElementById('lobby-status').innerText = "매칭 중...";
+        const { data: rooms } = await supabase.from('cannon_rooms').select('*').eq('status', 'WAITING').limit(1);
 
-    async function refreshRooms() {
-        const { data, error } = await sClient.from('rooms').select('*').eq('status', 'WAITING');
-        if (error) return log("방 목록 로드 실패: " + error.message);
-        
-        const list = document.getElementById('room-list');
-        list.innerHTML = data.length === 0 ? "대기 중인 방이 없습니다." : "";
-        data.forEach(room => {
-            const item = document.createElement('div');
-            item.className = 'room-item';
-            item.innerHTML = `<span>방 #${room.id.slice(0,4)}</span> <button class="btn" style="margin:0; padding:5px 10px;" onclick="joinRoom('${room.id}')">참가</button>`;
-            list.appendChild(item);
-        });
-    }
-
-    async function createRoom() {
-        log("방 생성 중...");
-        const { data, error } = await sClient.from('rooms').insert([{ p1_id: myId, status: 'WAITING' }]).select().single();
-        
-        if (error) {
-            log("방 생성 실패: " + error.message);
-            alert("SQL에서 RLS를 껐는지 확인하세요!");
-            return;
+        if (rooms && rooms.length > 0) {
+            roomId = rooms[0].id;
+            mySide = 'right';
+            await supabase.from('cannon_rooms').update({ p2_id: myId, status: 'PLAYING' }).eq('id', roomId);
+            initGame();
+        } else {
+            const { data } = await supabase.from('cannon_rooms').insert([{ p1_id: myId, status: 'WAITING' }]).select().single();
+            roomId = data.id;
+            mySide = 'left';
+            document.getElementById('lobby-status').innerText = "상대방을 기다리고 있습니다...";
+            supabase.channel(`room_${roomId}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'cannon_rooms' }, (p) => {
+                if (p.new.status === 'PLAYING') initGame();
+            }).subscribe();
         }
-
-        myRoomId = data.id;
-        mySide = 'left';
-        log("방 생성 성공! 상대방 대기 중...");
-        document.getElementById('lobby').innerHTML = `<h1>상대방 대기 중...</h1><p>방 ID: ${myRoomId.slice(0,4)}</p><button class="btn" onclick="location.reload()">취소</button>`;
-
-        // 상대방 참가 감시
-        sClient.channel(`room_${myRoomId}`)
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${myRoomId}` }, payload => {
-                if (payload.new.status === 'PLAYING') startGame();
-            }).subscribe();
     }
 
-    async function joinRoom(roomId) {
-        log("방 참가 중...");
-        const { error } = await sClient.from('rooms').update({ p2_id: myId, status: 'PLAYING' }).eq('id', roomId);
-        
-        if (error) return log("참가 실패: " + error.message);
-        
-        myRoomId = roomId;
-        mySide = 'right';
-        startGame();
-    }
-
-    function startGame() {
-        log("게임 시작!");
+    function initGame() {
         document.getElementById('lobby').style.display = 'none';
-        document.getElementById('ui').style.display = 'flex';
-        document.getElementById('bottom-menu').style.display = 'flex';
-        document.getElementById('my-side-text').innerText = "SIDE: " + mySide.toUpperCase();
-        
-        // 이벤트 구독
-        sClient.channel(`events_${myRoomId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_events', filter: `room_id=eq.${myRoomId}` }, payload => {
-                spawnUnit(payload.new.side, payload.new.unit_type);
-            }).subscribe();
-
-        setInterval(() => { gold += 10; updateUI(); }, 1000);
+        document.getElementById('game-ui').style.display = 'flex';
+        document.getElementById('controls').style.display = 'flex';
         resize();
-        requestAnimationFrame(update);
+
+        // 발사 정보 구독
+        supabase.channel(`shots_${roomId}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cannon_actions' }, (p) => {
+            if (p.new.room_id === roomId) createProjectile(p.new.side, p.new.angle, p.new.power);
+        }).subscribe();
+
+        // 턴 및 체력 동기화 구독
+        supabase.channel(`sync_${roomId}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'cannon_rooms' }, (p) => {
+            currentTurn = p.new.turn;
+            p1Hp = p.new.p1_hp;
+            p2Hp = p.new.p2_hp;
+            updateUI();
+        }).subscribe();
+
+        currentTurn = 'left';
+        updateUI();
+        requestAnimationFrame(render);
     }
 
-    async function sendSpawn(type) {
-        const costs = { sword: 20, shield: 50, archer: 40 };
-        if (gold < costs[type]) return;
+    async function fire() {
+        if (currentTurn !== mySide) return;
+        const angle = document.getElementById('angle-input').value;
+        const power = document.getElementById('power-input').value;
+
+        // 1. 발사 정보 전송
+        await supabase.from('cannon_actions').insert([{ room_id: roomId, side: mySide, angle: parseFloat(angle), power: parseFloat(power) }]);
         
-        gold -= costs[type];
-        const { error } = await sClient.from('game_events').insert([{ room_id: myRoomId, side: mySide, unit_type: type }]);
-        if (error) log("유닛 소환 실패: " + error.message);
+        // 2. 턴 교체 (방장만 업데이트하거나 각자 처리)
+        const nextTurn = mySide === 'left' ? 'right' : 'left';
+        await supabase.from('cannon_rooms').update({ turn: nextTurn }).eq('id', roomId);
     }
 
-    function spawnUnit(side, type) {
-        const stats = {
-            sword: { hp: 100, speed: 2, range: 40, atk: 10, icon: '⚔️' },
-            shield: { hp: 300, speed: 1, range: 30, atk: 5, icon: '🛡️' },
-            archer: { hp: 60, speed: 1.5, range: 200, atk: 15, icon: '🏹' }
-        }[type];
-
-        units.push({
-            side, type, ...stats,
-            maxHp: stats.hp,
-            x: side === 'left' ? 100 : canvas.width - 100,
-            y: canvas.height / 2 + (Math.random() * 40 - 20),
-            lastAtk: 0
+    function createProjectile(side, angle, power) {
+        const rad = angle * (Math.PI / 180);
+        const startX = side === 'left' ? 100 : canvas.width - 100;
+        const startY = canvas.height - 100;
+        
+        projectiles.push({
+            side,
+            x: startX, y: startY,
+            vx: Math.cos(rad) * (power / 5) * (side === 'left' ? 1 : -1),
+            vy: -Math.sin(rad) * (power / 5),
+            active: true
         });
     }
 
-    function update(time) {
+    function render() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 성 그리기
-        drawBase(60, canvas.height/2, 'left', baseHp.left);
-        drawBase(canvas.width - 60, canvas.height/2, 'right', baseHp.right);
+        // 지면
+        ctx.fillStyle = '#334155'; ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
 
-        units.forEach(u => {
-            const enemySide = u.side === 'left' ? 'right' : 'left';
-            const enemyBaseX = u.side === 'left' ? canvas.width - 60 : 60;
-            
-            // 가장 가까운 적 찾기
-            let target = null;
-            let minDist = Infinity;
-            units.forEach(e => {
-                if (e.side !== u.side) {
-                    let d = Math.abs(u.x - e.x);
-                    if (d < minDist) { minDist = d; target = e; }
-                }
-            });
+        // 캐논(포탑)
+        drawCannon(100, canvas.height - 50, '#3b82f6');
+        drawCannon(canvas.width - 100, canvas.height - 50, '#ef4444');
 
-            // 전투 로직
-            if (minDist <= u.range) {
-                if (time - u.lastAtk > 1000) { target.hp -= u.atk; u.lastAtk = time; }
-            } else if (Math.abs(u.x - enemyBaseX) <= u.range) {
-                if (time - u.lastAtk > 1000) { baseHp[enemySide] -= u.atk; u.lastAtk = time; }
-            } else {
-                u.x += u.side === 'left' ? u.speed : -u.speed;
+        // 포탄 업데이트
+        projectiles.forEach((p, i) => {
+            if (!p.active) return;
+            p.x += p.vx;
+            p.vy += 0.2; // 중력
+            p.y += p.vy;
+
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI*2); ctx.fill();
+
+            // 충돌 체크
+            if (p.y > canvas.height - 50) {
+                checkHit(p);
+                p.active = false;
             }
-
-            // 그리기
-            ctx.font = "24px Arial";
-            ctx.fillText(u.icon, u.x, u.y);
-            ctx.fillStyle = 'red'; ctx.fillRect(u.x - 15, u.y - 30, 30, 4);
-            ctx.fillStyle = 'lime'; ctx.fillRect(u.x - 15, u.y - 30, (u.hp/u.maxHp)*30, 4);
         });
 
-        units = units.filter(u => u.hp > 0);
-        if (baseHp.left <= 0 || baseHp.right <= 0) {
-            alert(baseHp.left <= 0 ? "RED WIN!" : "BLUE WIN!");
-            location.reload();
-            return;
-        }
-
-        updateUI();
-        requestAnimationFrame(update);
+        requestAnimationFrame(render);
     }
 
-    function drawBase(x, y, side, hp) {
-        ctx.fillStyle = side === 'left' ? varColor('--p1') : varColor('--p2');
-        ctx.fillRect(x-40, y-60, 80, 120);
-        ctx.fillStyle = 'white'; ctx.fillText("BASE", x-25, y);
-        ctx.fillStyle = 'gray'; ctx.fillRect(x-40, y-80, 80, 10);
-        ctx.fillStyle = 'lime'; ctx.fillRect(x-40, y-80, hp * 0.8, 10);
+    async function checkHit(p) {
+        const targetX = p.side === 'left' ? canvas.width - 100 : 100;
+        const dist = Math.abs(p.x - targetX);
+        
+        if (dist < 40 && mySide === 'left') { // 판정은 한 쪽에서만 수행 (동기화)
+            if (p.side === 'left') {
+                await supabase.from('cannon_rooms').update({ p2_hp: Math.max(0, p2Hp - 20) }).eq('id', roomId);
+            } else {
+                await supabase.from('cannon_rooms').update({ p1_hp: Math.max(0, p1Hp - 20) }).eq('id', roomId);
+            }
+        }
+    }
+
+    function drawCannon(x, y, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x - 20, y - 30, 40, 30);
+        ctx.fillRect(x - 5, y - 50, 10, 20);
     }
 
     function updateUI() {
-        document.getElementById('gold-val').innerText = gold;
-        document.getElementById('hp-val').innerText = `${Math.ceil(baseHp.right)} / 100`;
+        document.getElementById('p1-hp').innerText = `HP: ${p1Hp}`;
+        document.getElementById('p2-hp').innerText = `HP: ${p2Hp}`;
+        document.getElementById('turn-indicator').innerText = (currentTurn === mySide) ? "YOUR TURN!" : "WAITING...";
+        document.getElementById('fire-btn').disabled = (currentTurn !== mySide);
+
+        if (p1Hp <= 0 || p2Hp <= 0) {
+            alert(p1Hp <= 0 ? "RED TEAM WIN!" : "BLUE TEAM WIN!");
+            location.reload();
+        }
     }
 
-    function varColor(name) { return getComputedStyle(document.documentElement).getPropertyValue(name); }
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-    init();
+    window.onresize = resize;
+    quickMatch();
 </script>
 </body>
 </html>
