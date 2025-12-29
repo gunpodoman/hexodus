@@ -2,371 +2,235 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>HEXODUS: ULTIMATE</title>
+    <title>HEXODUS: THE FINAL</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
-        :root { --p1: #00d2ff; --p2: #ff0058; --bg: #05070a; --gold: #ffd700; }
-        * { box-sizing: border-box; user-select: none; }
-        body { margin: 0; background: var(--bg); color: white; font-family: 'Orbitron', sans-serif; overflow: hidden; }
+        :root { --p1: #3b82f6; --p2: #ef4444; --bg: #0f172a; }
+        body { margin: 0; background: var(--bg); color: white; font-family: sans-serif; overflow: hidden; }
         
-        /* 로비 인터페이스 */
-        #lobby-layer { position: fixed; inset: 0; background: radial-gradient(circle, #1a1f2c 0%, #05070a 100%); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .room-card { background: rgba(255,255,255,0.05); padding: 20px; margin: 10px; width: 400px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; transition: 0.3s; }
-        .room-card:hover { background: rgba(255,255,255,0.1); transform: scale(1.02); }
+        /* 로비 레이어 */
+        #lobby { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #020617; z-index: 100; }
+        .btn { background: #1e293b; border: 1px solid #334155; color: white; padding: 15px 30px; cursor: pointer; border-radius: 8px; font-weight: bold; margin: 10px; }
+        .btn:hover { background: #334155; }
+        .room-item { background: #1e293b; padding: 15px; margin: 5px; width: 300px; display: flex; justify-content: space-between; border-radius: 8px; }
+
+        /* 게임 화면 */
+        #ui { position: absolute; top: 0; width: 100%; padding: 20px; display: none; justify-content: space-between; box-sizing: border-box; }
+        .stat { background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px; border: 2px solid #333; }
+        #bottom-menu { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: none; gap: 10px; }
         
-        /* 게임 UI */
-        #game-ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
-        .hud-panel { position: absolute; top: 20px; padding: 20px; background: rgba(0,0,0,0.8); border: 2px solid #333; border-radius: 15px; pointer-events: auto; min-width: 220px; }
-        .hud-left { left: 20px; border-left: 5px solid var(--p1); }
-        .hud-right { right: 20px; border-right: 5px solid var(--p2); text-align: right; }
-        
-        .gold-text { font-size: 1.8rem; color: var(--gold); font-weight: bold; text-shadow: 0 0 10px rgba(255,215,0,0.5); }
-        .hp-bar-container { width: 100%; height: 12px; background: #222; border-radius: 6px; margin-top: 10px; overflow: hidden; border: 1px solid #444; }
-        .hp-fill { height: 100%; transition: width 0.3s ease-out; }
-
-        /* 하단 유닛 바 */
-        #unit-bar { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: none; gap: 15px; pointer-events: auto; }
-        .unit-card { width: 100px; background: rgba(13, 17, 23, 0.9); border: 2px solid #30363d; border-radius: 12px; padding: 10px; cursor: pointer; text-align: center; transition: 0.2s; }
-        .unit-card:hover:not(:disabled) { border-color: var(--p1); transform: translateY(-10px); }
-        .unit-card:disabled { opacity: 0.4; grayscale: 1; }
-        .unit-card img { width: 40px; height: 40px; margin-bottom: 5px; }
-        .unit-cost { color: var(--gold); font-size: 0.9rem; }
-
-        #loading-screen { position: fixed; inset: 0; background: var(--bg); z-index: 2000; display: none; flex-direction: column; align-items: center; justify-content: center; }
-        .spinner { width: 50px; height: 50px; border: 5px solid #222; border-top-color: var(--p1); border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
         canvas { display: block; }
+        #debug { position: fixed; bottom: 0; left: 0; background: rgba(0,0,0,0.8); color: lime; font-size: 12px; max-height: 100px; overflow-y: auto; width: 100%; pointer-events: none; }
     </style>
 </head>
 <body>
 
-<div id="lobby-layer">
-    <h1 style="font-size: 4rem; text-shadow: 0 0 20px var(--p1); margin-bottom: 10px;">HEXODUS</h1>
-    <p style="color: #666; margin-bottom: 40px;">ULTIMATE 1vs1 REAL-TIME STRATEGY</p>
-    <button onclick="createRoom()" class="unit-card" style="width: 250px; height: auto; padding: 20px; background: #00d2ff22; border-color: var(--p1);">CREATE ROOM</button>
-    <div id="room-list" style="margin-top: 30px;"></div>
+<div id="lobby">
+    <h1>HEXODUS: 1vs1 전략</h1>
+    <button class="btn" onclick="createRoom()" style="background: var(--p1);">새 방 만들기</button>
+    <div id="room-list">방 목록 로딩 중...</div>
 </div>
 
-<div id="loading-screen">
-    <div class="spinner"></div>
-    <h2 id="loading-msg" style="margin-top: 20px;">WAITING FOR OPPONENT...</h2>
-</div>
-
-<div id="game-ui">
-    <div class="hud-panel hud-left">
-        <div style="color: var(--p1)">COMMANDER BLUE</div>
-        <div id="gold-left" class="gold-text">0</div>
-        <div class="hp-bar-container"><div id="hp-left" class="hp-fill" style="background: var(--p1); width: 100%;"></div></div>
+<div id="ui">
+    <div class="stat" style="border-left: 5px solid var(--p1);">
+        <div>MY GOLD: <span id="gold-val" style="color: gold;">0</span>G</div>
+        <div id="my-side-text">SIDE: -</div>
     </div>
-    
-    <div class="hud-panel hud-right">
-        <div style="color: var(--p2)">COMMANDER RED</div>
-        <div id="gold-right" class="gold-text">0</div>
-        <div class="hp-bar-container"><div id="hp-right" class="hp-fill" style="background: var(--p2); width: 100%;"></div></div>
-    </div>
-
-    <div id="unit-bar">
-        <button class="unit-card" onclick="reqSpawn('knight')">⚔️<br>KNIGHT<br><span class="unit-cost">20G</span></button>
-        <button class="unit-card" onclick="reqSpawn('archer')">🏹<br>ARCHER<br><span class="unit-cost">45G</span></button>
-        <button class="unit-card" onclick="reqSpawn('titan')">🛡️<br>TITAN<br><span class="unit-cost">100G</span></button>
+    <div class="stat" style="text-align: right; border-right: 5px solid var(--p2);">
+        <div>CORE HP</div>
+        <div id="hp-val" style="font-size: 20px; color: #ff4757;">100 / 100</div>
     </div>
 </div>
 
-<canvas id="mainCanvas"></canvas>
+<div id="bottom-menu">
+    <button class="btn" onclick="sendSpawn('sword')">⚔️ 검병 (20G)</button>
+    <button class="btn" onclick="sendSpawn('shield')">🛡️ 방패병 (50G)</button>
+    <button class="btn" onclick="sendSpawn('archer')">🏹 궁수 (40G)</button>
+</div>
+
+<div id="debug">시스템 로그 대기 중...</div>
+<canvas id="gameCanvas"></canvas>
 
 <script>
-    // --- 핵심 설정 ---
     const SUPABASE_URL = 'https://ypwfazsbnudddksqkkiz.supabase.co/';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlwd2ZhenNibnVkZGRrc3Fra2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5ODg4NTgsImV4cCI6MjA4MjU2NDg1OH0.Mz0jdNuLughgNtklbuBeh5K2Q4HQf2cKt6dmeqBSJy4';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const sClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // --- 게임 상수 ---
-    const UNIT_DATA = {
-        knight: { hp: 120, speed: 1.8, range: 45, atk: 15, cost: 20, color: '#3498db', icon: '⚔️' },
-        archer: { hp: 70,  speed: 1.4, range: 250, atk: 10, cost: 45, color: '#f1c40f', icon: '🏹' },
-        titan:  { hp: 450, speed: 0.8, range: 50, atk: 25, cost: 100, color: '#e74c3c', icon: '🛡️' }
-    };
-
-    // --- 게임 상태 ---
-    let myId, myRoomId, mySide;
-    let gold = 0, enemyGold = 0;
-    let baseHp = { left: 1000, right: 1000 };
-    let units = []; // {id, side, type, x, y, hp, state}
-    let particles = [];
-    let isGameRunning = false;
-
-    const canvas = document.getElementById('mainCanvas');
+    let myId = "user_" + Math.random().toString(36).slice(2, 7);
+    let myRoomId = null;
+    let mySide = null;
+    let gold = 0;
+    let baseHp = { left: 100, right: 100 };
+    let units = [];
+    
+    const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
 
-    // --- 초기화 및 로비 시스템 ---
-    async function init() {
-        const { data: { user } } = await supabase.auth.signInAnonymously();
-        myId = user.id;
-        fetchRooms();
-        
-        // 실시간 로비 감시
-        supabase.channel('lobby_updates').on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, fetchRooms).subscribe();
+    function log(msg) {
+        const d = document.getElementById('debug');
+        d.innerHTML += `<div>> ${msg}</div>`;
+        d.scrollTop = d.scrollHeight;
     }
 
-    async function fetchRooms() {
-        const { data } = await supabase.from('rooms').select('*').eq('status', 'WAITING').order('created_at', { ascending: false });
+    async function init() {
+        log("접속 시도 중...");
+        refreshRooms();
+        sClient.channel('lobby').on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, refreshRooms).subscribe();
+    }
+
+    async function refreshRooms() {
+        const { data, error } = await sClient.from('rooms').select('*').eq('status', 'WAITING');
+        if (error) return log("방 목록 로드 실패: " + error.message);
+        
         const list = document.getElementById('room-list');
-        list.innerHTML = data.length ? '' : '<p style="color:#444">NO ACTIVE BATTLES FOUND</p>';
+        list.innerHTML = data.length === 0 ? "대기 중인 방이 없습니다." : "";
         data.forEach(room => {
-            const card = document.createElement('div');
-            card.className = 'room-card';
-            card.innerHTML = `<span>BATTLE FIELD #${room.name.slice(0,4)}</span> <button onclick="joinRoom('${room.id}')" class="unit-card" style="margin:0; width:120px; background:var(--p2)">JOIN</button>`;
-            list.appendChild(card);
+            const item = document.createElement('div');
+            item.className = 'room-item';
+            item.innerHTML = `<span>방 #${room.id.slice(0,4)}</span> <button class="btn" style="margin:0; padding:5px 10px;" onclick="joinRoom('${room.id}')">참가</button>`;
+            list.appendChild(item);
         });
     }
 
     async function createRoom() {
-        const { data, error } = await supabase.from('rooms').insert([{ 
-            name: myId, p1_id: myId, status: 'WAITING' 
-        }]).select().single();
+        log("방 생성 중...");
+        const { data, error } = await sClient.from('rooms').insert([{ p1_id: myId, status: 'WAITING' }]).select().single();
         
-        if (data) {
-            myRoomId = data.id;
-            mySide = 'left';
-            showLoading(true, "WAITING FOR CHALLENGER...");
-            
-            // 방장은 누군가 들어오길 기다림 (p2_id가 업데이트 되는지 감시)
-            supabase.channel(`room_${myRoomId}`)
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${myRoomId}` }, (payload) => {
-                    if (payload.new.p2_id && payload.new.status === 'STARTING') {
-                        prepareGame();
-                    }
-                }).subscribe();
+        if (error) {
+            log("방 생성 실패: " + error.message);
+            alert("SQL에서 RLS를 껐는지 확인하세요!");
+            return;
         }
+
+        myRoomId = data.id;
+        mySide = 'left';
+        log("방 생성 성공! 상대방 대기 중...");
+        document.getElementById('lobby').innerHTML = `<h1>상대방 대기 중...</h1><p>방 ID: ${myRoomId.slice(0,4)}</p><button class="btn" onclick="location.reload()">취소</button>`;
+
+        // 상대방 참가 감시
+        sClient.channel(`room_${myRoomId}`)
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${myRoomId}` }, payload => {
+                if (payload.new.status === 'PLAYING') startGame();
+            }).subscribe();
     }
 
     async function joinRoom(roomId) {
+        log("방 참가 중...");
+        const { error } = await sClient.from('rooms').update({ p2_id: myId, status: 'PLAYING' }).eq('id', roomId);
+        
+        if (error) return log("참가 실패: " + error.message);
+        
         myRoomId = roomId;
         mySide = 'right';
-        showLoading(true, "CONNECTING TO BATTLE...");
-
-        // 참가 정보 업데이트 및 상태 변경
-        const { error } = await supabase.from('rooms').update({ 
-            p2_id: myId, status: 'STARTING' 
-        }).eq('id', roomId);
-
-        if (!error) prepareGame();
+        startGame();
     }
 
-    // --- 게임 준비 및 동기화 ---
-    async function prepareGame() {
-        showLoading(true, "INITIALIZING ENGINE...");
+    function startGame() {
+        log("게임 시작!");
+        document.getElementById('lobby').style.display = 'none';
+        document.getElementById('ui').style.display = 'flex';
+        document.getElementById('bottom-menu').style.display = 'flex';
+        document.getElementById('my-side-text').innerText = "SIDE: " + mySide.toUpperCase();
         
-        // 1초 뒤 게임 시작 (네트워크 안정화 대기)
-        setTimeout(() => {
-            showLoading(false);
-            document.getElementById('lobby-layer').style.display = 'none';
-            document.getElementById('game-ui').style.display = 'block';
-            document.getElementById('unit-bar').style.display = 'flex';
-            
-            isGameRunning = true;
-            resize();
-            
-            // 실시간 액션 리스너 가동
-            supabase.channel(`game_events_${myRoomId}`)
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_events', filter: `room_id=eq.${myRoomId}` }, (payload) => {
-                    if (payload.new.type === 'SPAWN') {
-                        spawnUnit(payload.new.data.side, payload.new.data.type);
-                    }
-                }).subscribe();
+        // 이벤트 구독
+        sClient.channel(`events_${myRoomId}`)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_events', filter: `room_id=eq.${myRoomId}` }, payload => {
+                spawnUnit(payload.new.side, payload.new.unit_type);
+            }).subscribe();
 
-            // 자원 획득 루프
-            setInterval(() => { if(isGameRunning) gold += 8; }, 1000);
-            requestAnimationFrame(mainLoop);
-        }, 1500);
+        setInterval(() => { gold += 10; updateUI(); }, 1000);
+        resize();
+        requestAnimationFrame(update);
     }
 
-    // --- 유닛 로직 ---
-    async function reqSpawn(type) {
-        if (gold < UNIT_DATA[type].cost) return;
-        gold -= UNIT_DATA[type].cost;
+    async function sendSpawn(type) {
+        const costs = { sword: 20, shield: 50, archer: 40 };
+        if (gold < costs[type]) return;
         
-        await supabase.from('game_events').insert([{
-            room_id: myRoomId, sender_id: myId, type: 'SPAWN', data: { side: mySide, type: type }
-        }]);
+        gold -= costs[type];
+        const { error } = await sClient.from('game_events').insert([{ room_id: myRoomId, side: mySide, unit_type: type }]);
+        if (error) log("유닛 소환 실패: " + error.message);
     }
 
     function spawnUnit(side, type) {
-        const stats = UNIT_DATA[type];
+        const stats = {
+            sword: { hp: 100, speed: 2, range: 40, atk: 10, icon: '⚔️' },
+            shield: { hp: 300, speed: 1, range: 30, atk: 5, icon: '🛡️' },
+            archer: { hp: 60, speed: 1.5, range: 200, atk: 15, icon: '🏹' }
+        }[type];
+
         units.push({
-            id: Math.random(),
-            side, type,
-            x: side === 'left' ? 120 : canvas.width - 120,
-            y: canvas.height / 2 + (Math.random() * 80 - 40),
-            hp: stats.hp,
+            side, type, ...stats,
             maxHp: stats.hp,
-            speed: stats.speed,
-            range: stats.range,
-            atk: stats.atk,
-            color: stats.color,
-            icon: stats.icon,
+            x: side === 'left' ? 100 : canvas.width - 100,
+            y: canvas.height / 2 + (Math.random() * 40 - 20),
             lastAtk: 0
         });
     }
 
-    // --- 게임 엔진 (메인 루프) ---
-    function mainLoop(timestamp) {
-        if (!isGameRunning) return;
-
+    function update(time) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawEnvironment();
 
-        // 1. 유닛 물리 및 AI 업데이트
+        // 성 그리기
+        drawBase(60, canvas.height/2, 'left', baseHp.left);
+        drawBase(canvas.width - 60, canvas.height/2, 'right', baseHp.right);
+
         units.forEach(u => {
-            let targetSide = u.side === 'left' ? 'right' : 'left';
-            let enemyBaseX = u.side === 'left' ? canvas.width - 60 : 60;
+            const enemySide = u.side === 'left' ? 'right' : 'left';
+            const enemyBaseX = u.side === 'left' ? canvas.width - 60 : 60;
             
             // 가장 가까운 적 찾기
-            let closestEnemy = null;
+            let target = null;
             let minDist = Infinity;
-            units.forEach(target => {
-                if (target.side !== u.side) {
-                    let d = Math.abs(u.x - target.x);
-                    if (d < minDist) { minDist = d; closestEnemy = target; }
+            units.forEach(e => {
+                if (e.side !== u.side) {
+                    let d = Math.abs(u.x - e.x);
+                    if (d < minDist) { minDist = d; target = e; }
                 }
             });
 
-            // 행동 결정
-            let distToBase = Math.abs(u.x - enemyBaseX);
-            
+            // 전투 로직
             if (minDist <= u.range) {
-                // 적 공격
-                attack(u, closestEnemy, timestamp);
-            } else if (distToBase <= u.range) {
-                // 본진 공격
-                attackBase(u, targetSide, timestamp);
+                if (time - u.lastAtk > 1000) { target.hp -= u.atk; u.lastAtk = time; }
+            } else if (Math.abs(u.x - enemyBaseX) <= u.range) {
+                if (time - u.lastAtk > 1000) { baseHp[enemySide] -= u.atk; u.lastAtk = time; }
             } else {
-                // 전진
                 u.x += u.side === 'left' ? u.speed : -u.speed;
             }
 
-            drawUnit(u);
+            // 그리기
+            ctx.font = "24px Arial";
+            ctx.fillText(u.icon, u.x, u.y);
+            ctx.fillStyle = 'red'; ctx.fillRect(u.x - 15, u.y - 30, 30, 4);
+            ctx.fillStyle = 'lime'; ctx.fillRect(u.x - 15, u.y - 30, (u.hp/u.maxHp)*30, 4);
         });
 
-        // 2. 죽은 유닛 및 파티클 처리
         units = units.filter(u => u.hp > 0);
-        updateParticles();
-
-        // 3. UI 업데이트
-        updateUI();
-
-        // 4. 승리 판정
         if (baseHp.left <= 0 || baseHp.right <= 0) {
-            isGameRunning = false;
-            showResult(baseHp.left <= 0 ? "RED TEAM WINS" : "BLUE TEAM WINS");
+            alert(baseHp.left <= 0 ? "RED WIN!" : "BLUE WIN!");
+            location.reload();
+            return;
         }
 
-        requestAnimationFrame(mainLoop);
+        updateUI();
+        requestAnimationFrame(update);
     }
 
-    function attack(u, target, time) {
-        if (time - u.lastAtk > 1000) {
-            target.hp -= u.atk;
-            u.lastAtk = time;
-            createParticle(target.x, target.y, u.color);
-        }
-    }
-
-    function attackBase(u, side, time) {
-        if (time - u.lastAtk > 1000) {
-            baseHp[side] -= u.atk;
-            u.lastAtk = time;
-            createParticle(side === 'left' ? 60 : canvas.width - 60, canvas.height / 2, 'white');
-        }
-    }
-
-    // --- 시각적 렌더링 ---
-    function drawEnvironment() {
-        // 배경 그리드
-        ctx.strokeStyle = '#111'; ctx.lineWidth = 1;
-        for(let i=0; i<canvas.width; i+=50) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke(); }
-        
-        // 지면
-        ctx.fillStyle = '#0a0c12';
-        ctx.fillRect(0, canvas.height/2 - 100, canvas.width, 200);
-        
-        // 베이스(성)
-        drawCastle(60, canvas.height/2, varColor('--p1'), baseHp.left);
-        drawCastle(canvas.width - 60, canvas.height/2, varColor('--p2'), baseHp.right);
-    }
-
-    function drawCastle(x, y, color, hp) {
-        ctx.shadowBlur = 20; ctx.shadowColor = color;
-        ctx.fillStyle = color;
-        ctx.fillRect(x-40, y-80, 80, 160);
-        ctx.shadowBlur = 0;
-        
-        // 디테일 창문
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.fillRect(x-20, y-40, 15, 30);
-        ctx.fillRect(x+5, y-40, 15, 30);
-    }
-
-    function drawUnit(u) {
-        ctx.font = "30px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(u.icon, u.x, u.y + 10);
-        
-        // HP 바
-        const barW = 40;
-        ctx.fillStyle = '#333'; ctx.fillRect(u.x - barW/2, u.y - 40, barW, 5);
-        ctx.fillStyle = u.side === 'left' ? varColor('--p1') : varColor('--p2');
-        ctx.fillRect(u.x - barW/2, u.y - 40, (u.hp/u.maxHp) * barW, 5);
-    }
-
-    function createParticle(x, y, color) {
-        for(let i=0; i<5; i++) {
-            particles.push({ x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1, color });
-        }
-    }
-
-    function updateParticles() {
-        particles.forEach((p, i) => {
-            p.x += p.vx; p.y += p.vy; p.life -= 0.02;
-            ctx.globalAlpha = p.life;
-            ctx.fillStyle = p.color;
-            ctx.fillRect(p.x, p.y, 4, 4);
-        });
-        ctx.globalAlpha = 1;
-        particles = particles.filter(p => p.life > 0);
+    function drawBase(x, y, side, hp) {
+        ctx.fillStyle = side === 'left' ? varColor('--p1') : varColor('--p2');
+        ctx.fillRect(x-40, y-60, 80, 120);
+        ctx.fillStyle = 'white'; ctx.fillText("BASE", x-25, y);
+        ctx.fillStyle = 'gray'; ctx.fillRect(x-40, y-80, 80, 10);
+        ctx.fillStyle = 'lime'; ctx.fillRect(x-40, y-80, hp * 0.8, 10);
     }
 
     function updateUI() {
-        document.getElementById('gold-left').innerText = Math.floor(mySide === 'left' ? gold : 0) + "G";
-        document.getElementById('gold-right').innerText = Math.floor(mySide === 'right' ? gold : 0) + "G";
-        document.getElementById('hp-left').style.width = (baseHp.left / 10) + "%";
-        document.getElementById('hp-right').style.width = (baseHp.right / 10) + "%";
-        
-        // 버튼 비활성화 로직
-        Object.keys(UNIT_DATA).forEach(type => {
-            const btn = document.querySelector(`button[onclick="reqSpawn('${type}')"]`);
-            if(btn) btn.disabled = gold < UNIT_DATA[type].cost;
-        });
+        document.getElementById('gold-val').innerText = gold;
+        document.getElementById('hp-val').innerText = `${Math.ceil(baseHp.right)} / 100`;
     }
 
-    // --- 유틸리티 ---
-    function showLoading(show, msg = "") {
-        document.getElementById('loading-screen').style.display = show ? 'flex' : 'none';
-        document.getElementById('loading-msg').innerText = msg;
-    }
-
-    function showResult(txt) {
-        document.getElementById('overlay').style.display = 'flex';
-        document.getElementById('result-text').innerText = txt;
-    }
-
-    function varColor(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+    function varColor(name) { return getComputedStyle(document.documentElement).getPropertyValue(name); }
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-    window.onresize = resize;
-
     init();
 </script>
 </body>
